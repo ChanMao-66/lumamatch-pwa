@@ -3,12 +3,12 @@ const $$ = (selector) => [...document.querySelectorAll(selector)];
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const PRESETS = {
-  fujiClassic: { name: "经典负片感", mean: [137, 143, 130], std: [52, 49, 43], saturation: 0.84, warmth: -2, fade: 0.05 },
-  fujiVelvia: { name: "鲜艳正片感", mean: [136, 148, 119], std: [72, 69, 66], saturation: 1.34, warmth: 2, fade: 0 },
-  leicaCinema: { name: "徕卡电影感", mean: [139, 125, 116], std: [67, 59, 54], saturation: 0.96, warmth: 8, fade: 0.015 },
-  portraWarm: { name: "暖调人像", mean: [171, 151, 137], std: [51, 46, 43], saturation: 0.9, warmth: 10, fade: 0.04 },
-  japanAir: { name: "日系空气感", mean: [184, 190, 181], std: [43, 40, 39], saturation: 0.76, warmth: 1, fade: 0.08 },
-  noir: { name: "黑白纪实", mean: [129, 129, 129], std: [68, 68, 68], saturation: 0, warmth: 0, fade: 0.015 }
+  fujiClassic: { name: "经典负片感", saturation: 0.9, temperature: -1, tone: { contrast: 1.07, exposure: 0, shadows: 0.01, highlights: -0.04, fade: 0.015 }, shadowTone: [2, -1], highlightTone: [-2, 2], clarity: 0.04 },
+  fujiVelvia: { name: "鲜艳正片感", saturation: 1.16, temperature: 1, tone: { contrast: 1.12, exposure: 0, shadows: -0.02, highlights: -0.02, fade: 0 }, shadowTone: [1, -1], highlightTone: [-2, 3], clarity: 0.08 },
+  leicaCinema: { name: "徕卡电影感", saturation: 0.94, temperature: 4, tone: { contrast: 1.1, exposure: -0.03, shadows: -0.03, highlights: -0.05, fade: 0.01 }, shadowTone: [2, -2], highlightTone: [-3, 4], clarity: 0.06 },
+  portraWarm: { name: "暖调人像", saturation: 0.92, temperature: 6, tone: { contrast: 0.98, exposure: 0.06, shadows: 0.03, highlights: -0.06, fade: 0.025 }, shadowTone: [0, 1], highlightTone: [-4, 5], clarity: 0.01 },
+  japanAir: { name: "日系空气感", saturation: 0.78, temperature: 1, tone: { contrast: 0.9, exposure: 0.12, shadows: 0.06, highlights: -0.05, fade: 0.04 }, shadowTone: [2, -1], highlightTone: [-1, 2], clarity: 0 },
+  noir: { name: "黑白纪实", saturation: 0, temperature: 0, tone: { contrast: 1.14, exposure: 0, shadows: -0.02, highlights: -0.04, fade: 0.008 }, shadowTone: [0, 0], highlightTone: [0, 0], clarity: 0.1 }
 };
 
 const state = {
@@ -16,7 +16,7 @@ const state = {
   source: null,
   preset: null,
   styledFull: null,
-  strength: 0.72,
+  strength: 0.82,
   skinProtect: true,
   exposure: 0,
   contrast: 0,
@@ -112,7 +112,7 @@ function updateReadyState() {
     : state.preset ? "现在只需上传自己的照片" : "选择一个范本或加入参考照片";
 }
 
-function sampleStats(image, max = 180) {
+function analyzeImage(image, max = 256) {
   const scale = Math.min(1, max / Math.max(image.naturalWidth, image.naturalHeight));
   const width = Math.max(1, Math.round(image.naturalWidth * scale));
   const height = Math.max(1, Math.round(image.naturalHeight * scale));
@@ -124,21 +124,124 @@ function sampleStats(image, max = 180) {
   const data = ctx.getImageData(0, 0, width, height).data;
   const sums = [0, 0, 0];
   const squares = [0, 0, 0];
+  const histogram = new Uint32Array(256);
+  const profileSums = Array.from({ length: 4 }, () => [0, 0, 0]);
   let lumSum = 0;
   let satSum = 0;
+  let cbSum = 0, crSum = 0, cbSquare = 0, crSquare = 0;
   let count = 0;
-  for (let i = 0; i < data.length; i += 16) {
+  for (let i = 0; i < data.length; i += 4) {
     const r = data[i], g = data[i + 1], b = data[i + 2];
     const maxC = Math.max(r, g, b), minC = Math.min(r, g, b);
+    const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const cb = b - luminance;
+    const cr = r - luminance;
     sums[0] += r; sums[1] += g; sums[2] += b;
     squares[0] += r * r; squares[1] += g * g; squares[2] += b * b;
-    lumSum += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    lumSum += luminance;
     satSum += maxC ? (maxC - minC) / maxC : 0;
+    cbSum += cb; crSum += cr; cbSquare += cb * cb; crSquare += cr * cr;
+    histogram[clamp(Math.round(luminance), 0, 255)]++;
+    const profileBin = clamp(Math.floor(luminance / 64), 0, 3);
+    profileSums[profileBin][0] += cb;
+    profileSums[profileBin][1] += cr;
+    profileSums[profileBin][2]++;
     count++;
   }
   const mean = sums.map(value => value / count);
   const std = squares.map((value, index) => Math.sqrt(Math.max(1, value / count - mean[index] * mean[index])));
-  return { mean, std, luminance: lumSum / count, saturation: satSum / count };
+  const chromaMean = [cbSum / count, crSum / count];
+  const chromaStd = [
+    Math.sqrt(Math.max(1, cbSquare / count - chromaMean[0] * chromaMean[0])),
+    Math.sqrt(Math.max(1, crSquare / count - chromaMean[1] * chromaMean[1]))
+  ];
+  const rawProfile = profileSums.map(bin => bin[2]
+    ? [bin[0] / bin[2], bin[1] / bin[2]]
+    : [...chromaMean]);
+  const chromaProfile = rawProfile.map((value, index) => {
+    const previous = rawProfile[Math.max(0, index - 1)];
+    const next = rawProfile[Math.min(rawProfile.length - 1, index + 1)];
+    return [
+      previous[0] * 0.2 + value[0] * 0.6 + next[0] * 0.2,
+      previous[1] * 0.2 + value[1] * 0.6 + next[1] * 0.2
+    ];
+  });
+  return { mean, std, luminance: lumSum / count, saturation: satSum / count, histogram, chromaMean, chromaStd, chromaProfile };
+}
+
+function sampleStats(image, max = 180) {
+  return analyzeImage(image, max);
+}
+
+function buildToneMap(sourceHistogram, targetHistogram, strength) {
+  const sourceTotal = sourceHistogram.reduce((sum, value) => sum + value, 0);
+  const targetTotal = targetHistogram.reduce((sum, value) => sum + value, 0);
+  const sourceCdf = new Float32Array(256);
+  const targetCdf = new Float32Array(256);
+  let runningSource = 0, runningTarget = 0;
+  for (let i = 0; i < 256; i++) {
+    runningSource += sourceHistogram[i];
+    runningTarget += targetHistogram[i];
+    sourceCdf[i] = runningSource / Math.max(1, sourceTotal);
+    targetCdf[i] = runningTarget / Math.max(1, targetTotal);
+  }
+  const raw = new Float32Array(256);
+  let targetIndex = 0;
+  for (let i = 0; i < 256; i++) {
+    while (targetIndex < 255 && targetCdf[targetIndex] < sourceCdf[i]) targetIndex++;
+    raw[i] = clamp(targetIndex, i - 56, i + 56);
+  }
+  const smoothed = new Float32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let sum = 0, weight = 0;
+    for (let offset = -4; offset <= 4; offset++) {
+      const index = clamp(i + offset, 0, 255);
+      const w = 5 - Math.abs(offset);
+      sum += raw[index] * w;
+      weight += w;
+    }
+    smoothed[i] = sum / weight;
+  }
+  const map = new Float32Array(256);
+  let previous = 0;
+  for (let i = 0; i < 256; i++) {
+    let value = i + (smoothed[i] - i) * strength;
+    value = clamp(value, i === 0 ? 0 : 3, 249);
+    map[i] = Math.max(previous, value);
+    previous = map[i];
+  }
+  return map;
+}
+
+function buildPresetToneMap(preset, strength) {
+  const map = new Float32Array(256);
+  const recipe = preset.tone;
+  for (let i = 0; i < 256; i++) {
+    let x = i / 255;
+    if (recipe.exposure >= 0) x = 1 - (1 - x) * Math.pow(2, recipe.exposure);
+    else x *= Math.pow(2, recipe.exposure);
+    x = 0.5 + (x - 0.5) * recipe.contrast;
+    x += recipe.shadows * Math.pow(1 - clamp(x, 0, 1), 2);
+    x += recipe.highlights * Math.pow(clamp(x, 0, 1), 2);
+    x = recipe.fade + (1 - recipe.fade) * x;
+    const styled = clamp(x * 255, 2, 249);
+    map[i] = i + (styled - i) * strength;
+  }
+  return map;
+}
+
+function gamutMap(luminance, r, g, b) {
+  let scale = 1;
+  for (const value of [r, g, b]) {
+    if (value > 255 && value !== luminance) scale = Math.min(scale, (255 - luminance) / (value - luminance));
+    if (value < 0 && value !== luminance) scale = Math.min(scale, (0 - luminance) / (value - luminance));
+  }
+  scale = clamp(scale, 0, 1);
+  return [
+    luminance + (r - luminance) * scale,
+    luminance + (g - luminance) * scale,
+    luminance + (b - luminance) * scale
+  ];
 }
 
 function isSkinPixel(r, g, b) {
@@ -158,10 +261,8 @@ function makeBlurData(canvas, radius = 2) {
 
 function transformImage() {
   const source = state.source.image;
-  const sourceStats = sampleStats(source);
-  const target = state.preset
-    ? { mean: state.preset.mean, std: state.preset.std }
-    : sampleStats(state.reference.image);
+  const sourceStats = analyzeImage(source);
+  const targetStats = state.preset ? null : analyzeImage(state.reference.image);
   const full = document.createElement("canvas");
   full.width = source.naturalWidth;
   full.height = source.naturalHeight;
@@ -170,54 +271,95 @@ function transformImage() {
   const imageData = ctx.getImageData(0, 0, full.width, full.height);
   const data = imageData.data;
   const needsTexture = state.smooth > 0 || state.detail > 0 || state.wow;
-  const blurData = needsTexture ? makeBlurData(full, state.wow ? 3.2 : 2.2) : null;
+  const blurData = needsTexture ? makeBlurData(full, 2.4) : null;
   const amount = state.strength;
-  const gains = sourceStats.std.map((value, index) => clamp(target.std[index] / value, 0.62, 1.65));
+  const toneMap = state.preset
+    ? buildPresetToneMap(state.preset, amount)
+    : buildToneMap(sourceStats.histogram, targetStats.histogram, amount);
+  const targetChromaMean = targetStats?.chromaMean ?? sourceStats.chromaMean;
+  const targetChromaStd = targetStats?.chromaStd ?? sourceStats.chromaStd;
+  const chromaGain = [
+    clamp(targetChromaStd[0] / sourceStats.chromaStd[0], 0.84, 1.18),
+    clamp(targetChromaStd[1] / sourceStats.chromaStd[1], 0.84, 1.18)
+  ];
+  const chromaProfileOffset = state.preset ? null : sourceStats.chromaProfile.map((value, index) => [
+    clamp(targetStats.chromaProfile[index][0] - value[0], -22, 22),
+    clamp(targetStats.chromaProfile[index][1] - value[1], -22, 22)
+  ]);
   const presetSaturation = state.preset?.saturation ?? 1;
-  const presetWarmth = state.preset?.warmth ?? 0;
-  const fade = state.preset?.fade ?? 0;
+  const presetTemperature = state.preset?.temperature ?? 0;
+  const presetClarity = state.preset?.clarity ?? 0;
 
   for (let i = 0; i < data.length; i += 4) {
-    const original = [data[i], data[i + 1], data[i + 2]];
-    const skin = isSkinPixel(original[0], original[1], original[2]);
-    const smoothMix = skin ? state.smooth / 100 : 0;
-    const base = original.map((value, channel) => {
-      if (!blurData) return value;
-      const blurred = blurData[i + channel];
-      const smoothed = value * (1 - smoothMix) + blurred * smoothMix;
-      const localClarity = state.wow ? 0.26 : 0;
-      return smoothed + (value - blurred) * (state.detail / 28 + localClarity);
-    });
-    const localAmount = skin && state.skinProtect ? amount * 0.3 : amount;
-    let mapped = base.map((value, channel) => {
-      const matched = (value - sourceStats.mean[channel]) * gains[channel] + target.mean[channel];
-      return value * (1 - localAmount) + matched * localAmount;
-    });
-    const luminance = 0.2126 * mapped[0] + 0.7152 * mapped[1] + 0.0722 * mapped[2];
-    const wowSaturation = state.wow ? 1.16 : 1;
-    const effectiveSaturation = skin && state.skinProtect
-      ? Math.min(1.04, presetSaturation * wowSaturation)
-      : presetSaturation * wowSaturation;
-    mapped = mapped.map(value => luminance + (value - luminance) * effectiveSaturation);
-    mapped = mapped.map(value => value * (1 - fade) + 20 * fade);
-    mapped[0] += (state.warmth + presetWarmth) * 0.55;
-    mapped[2] -= (state.warmth + presetWarmth) * 0.55;
-    if (state.wow && !skin) {
-      const highlight = clamp((luminance - 105) / 120, 0, 1);
-      mapped[0] += 10 * highlight;
-      mapped[1] += 4 * highlight + 3 * (1 - highlight);
-      mapped[2] += 5 * (1 - highlight) - 7 * highlight;
+    const r = data[i], g = data[i + 1], b = data[i + 2];
+    const originalY = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const skin = isSkinPixel(r, g, b);
+    let cb = b - originalY;
+    let cr = r - originalY;
+    let blurY = originalY, blurCb = cb, blurCr = cr;
+    if (blurData) {
+      const br = blurData[i], bg = blurData[i + 1], bb = blurData[i + 2];
+      blurY = 0.2126 * br + 0.7152 * bg + 0.0722 * bb;
+      blurCb = bb - blurY;
+      blurCr = br - blurY;
     }
 
-    for (let channel = 0; channel < 3; channel++) {
-      let value = mapped[channel] + state.exposure * 1.25;
-      if (skin) value += state.faceLight * 0.75;
-      const effectiveContrast = state.contrast + (state.wow ? 10 : 0);
-      value = (value - 127.5) * (1 + effectiveContrast / 100) + 127.5;
-      if (state.wow && value > 225) value = 225 + (value - 225) * 0.52;
-      if (state.wow && value < 18) value = 18 + (value - 18) * 0.72;
-      data[i + channel] = clamp(value, 0, 255);
+    if (skin && state.smooth > 0) {
+      const chromaSmooth = clamp(state.smooth / 100 * 0.45, 0, 0.3);
+      cb = cb * (1 - chromaSmooth) + blurCb * chromaSmooth;
+      cr = cr * (1 - chromaSmooth) + blurCr * chromaSmooth;
     }
+
+    const localChromaAmount = skin && state.skinProtect ? amount * 0.14 : amount;
+    if (!state.preset) {
+      const profilePosition = clamp(blurY / 255 * 3, 0, 3);
+      const profileLow = Math.floor(profilePosition);
+      const profileHigh = Math.min(3, profileLow + 1);
+      const profileMix = profilePosition - profileLow;
+      const profileCb = chromaProfileOffset[profileLow][0] * (1 - profileMix) + chromaProfileOffset[profileHigh][0] * profileMix;
+      const profileCr = chromaProfileOffset[profileLow][1] * (1 - profileMix) + chromaProfileOffset[profileHigh][1] * profileMix;
+      cb = (cb - sourceStats.chromaMean[0]) * (1 + (chromaGain[0] - 1) * localChromaAmount) +
+        sourceStats.chromaMean[0] + profileCb * localChromaAmount;
+      cr = (cr - sourceStats.chromaMean[1]) * (1 + (chromaGain[1] - 1) * localChromaAmount) +
+        sourceStats.chromaMean[1] + profileCr * localChromaAmount;
+    }
+
+    let saturation = 1 + (presetSaturation - 1) * amount;
+    if (skin && state.skinProtect) saturation = 1 + (saturation - 1) * 0.25;
+    if (state.wow && !skin) saturation *= 1.035;
+    cb *= saturation;
+    cr *= saturation;
+
+    const warmth = state.warmth * 0.11 + presetTemperature * amount;
+    cb -= warmth;
+    cr += warmth;
+
+    let mappedY = toneMap[clamp(Math.round(originalY), 0, 255)];
+    const exposureEv = state.exposure / 40;
+    let normalizedY = mappedY / 255;
+    if (exposureEv >= 0) normalizedY = 1 - (1 - normalizedY) * Math.pow(2, exposureEv);
+    else normalizedY *= Math.pow(2, exposureEv);
+    normalizedY = 0.5 + (normalizedY - 0.5) * (1 + state.contrast / 100);
+    mappedY = clamp(normalizedY * 255 + (skin ? state.faceLight * 0.45 : 0), 2, 250);
+
+    const detailStrength = state.detail / 100 * 0.42 + presetClarity + (state.wow ? 0.11 : 0);
+    const detail = clamp((originalY - blurY) * detailStrength, -8, 8);
+    mappedY = clamp(mappedY + detail, 2, 250);
+
+    if (state.preset && !skin) {
+      const highlightWeight = clamp((mappedY - 96) / 130, 0, 1);
+      const shadowWeight = 1 - highlightWeight;
+      cb += (state.preset.shadowTone[0] * shadowWeight + state.preset.highlightTone[0] * highlightWeight) * amount;
+      cr += (state.preset.shadowTone[1] * shadowWeight + state.preset.highlightTone[1] * highlightWeight) * amount;
+    }
+
+    let outR = mappedY + cr;
+    let outB = mappedY + cb;
+    let outG = (mappedY - 0.2126 * outR - 0.0722 * outB) / 0.7152;
+    [outR, outG, outB] = gamutMap(mappedY, outR, outG, outB);
+    data[i] = clamp(Math.round(outR), 0, 255);
+    data[i + 1] = clamp(Math.round(outG), 0, 255);
+    data[i + 2] = clamp(Math.round(outB), 0, 255);
   }
   ctx.putImageData(imageData, 0, 0);
   state.styledFull = full;
@@ -349,6 +491,17 @@ function drawTransformed(ctx, width, height, image, crop, fill, rotation) {
   ctx.restore();
 }
 
+function getExportDimensions() {
+  const source = state.source.image;
+  const resolutionMode = $("#exportResolution")?.value ?? "native";
+  if (resolutionMode === "original") return { width: source.naturalWidth, height: source.naturalHeight, label: "保持原图尺寸" };
+  let width = Math.max(1, Math.round(state.crop?.w ?? source.naturalWidth));
+  let height = Math.max(1, Math.round(state.crop?.h ?? source.naturalHeight));
+  const quarter = Math.abs(state.quarterTurn % 180);
+  if (quarter === 90) [width, height] = [height, width];
+  return { width, height, label: "原生清晰度" };
+}
+
 function renderAll() {
   if (!state.styledFull) return;
   const width = state.source.image.naturalWidth;
@@ -362,10 +515,8 @@ function renderAll() {
     paintCanvas(card.querySelector("canvas"), state.styledFull, crop, true, totalRotation());
     card.classList.toggle("selected", mode === state.composition);
   });
-  const editLabel = state.composition === "original" && totalRotation() === 0
-    ? "完整画面"
-    : "智慧重构并维持原尺寸";
-  $("#exportMeta").textContent = `输出 ${width.toLocaleString()} × ${height.toLocaleString()} px · ${editLabel}`;
+  const exportSize = getExportDimensions();
+  $("#exportMeta").textContent = `输出 ${exportSize.width.toLocaleString()} × ${exportSize.height.toLocaleString()} px · ${exportSize.label}`;
 }
 
 async function processPhotos() {
@@ -397,11 +548,21 @@ async function processPhotos() {
 
 function exportImage() {
   const source = state.source.image;
+  const exportSize = getExportDimensions();
   const out = document.createElement("canvas");
-  out.width = source.naturalWidth;
-  out.height = source.naturalHeight;
+  out.width = exportSize.width;
+  out.height = exportSize.height;
   const ctx = out.getContext("2d");
-  drawTransformed(ctx, out.width, out.height, state.styledFull, state.crop, true, totalRotation());
+  const isUnchangedFrame = state.composition === "original" && totalRotation() === 0 &&
+    out.width === source.naturalWidth && out.height === source.naturalHeight;
+  if (isUnchangedFrame) {
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(state.styledFull, 0, 0);
+  } else {
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    drawTransformed(ctx, out.width, out.height, state.styledFull, state.crop, true, totalRotation());
+  }
   const mime = $("#exportFormat").value;
   const extension = mime === "image/png" ? "png" : "jpg";
   out.toBlob(blob => {
@@ -426,9 +587,9 @@ function autoRetouch() {
   const stats = sampleStats(state.source.image);
   updateControl("exposure", Math.round(clamp((145 - stats.luminance) / 5.5, -14, 14)));
   updateControl("contrast", Math.round(clamp(16 - stats.std.reduce((a, b) => a + b, 0) / 11, -5, 12)));
-  updateControl("smooth", 24);
-  updateControl("faceLight", 10);
-  updateControl("detail", 12);
+  updateControl("smooth", 10);
+  updateControl("faceLight", 8);
+  updateControl("detail", 8);
   transformImage();
   renderAll();
   showToast("已套用 AI 推荐修图");
@@ -515,6 +676,7 @@ $("#sourceInput").addEventListener("change", event => handleFile(event.target, "
 $("#matchButton").addEventListener("click", processPhotos);
 $("#restartButton").addEventListener("click", resetApp);
 $("#exportButton").addEventListener("click", exportImage);
+$("#exportResolution").addEventListener("change", renderAll);
 $("#clearPreset").addEventListener("click", () => clearPreset());
 $$(".preset-card").forEach(card => card.addEventListener("click", () => selectPreset(card.dataset.preset)));
 
@@ -551,7 +713,7 @@ $("#wowMode").addEventListener("change", event => {
   state.wow = event.target.checked;
   transformImage();
   renderAll();
-  showToast(state.wow ? "已开启惊艳增强" : "已切换为自然效果");
+  showToast(state.wow ? "已开启智能光影增强" : "已切换为自然效果");
 });
 $("#useRecommendation").addEventListener("click", () => {
   if (!state.recommendedPreset) return;

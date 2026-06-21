@@ -118,9 +118,9 @@
               <span class="control-index">01</span>
               <h3>風格強度</h3>
             </div>
-            <output id="strengthValue">72%</output>
+            <output id="strengthValue">82%</output>
           </div>
-          <input id="strengthSlider" type="range" min="0" max="100" value="72" />
+          <input id="strengthSlider" type="range" min="0" max="100" value="82" />
           <div class="range-labels"><span>保留原貌</span><span>貼近參考</span></div>
 
           <div class="fine-controls">
@@ -134,7 +134,7 @@
             <label class="switch"><input id="skinProtect" type="checkbox" checked /><span></span></label>
           </div>
           <div class="toggle-row impact-row">
-            <div><strong>惊艳增强</strong><small>重塑局部对比、通透度与高光暖色，让前后差异更明显</small></div>
+            <div><strong>智能光影增强</strong><small>只增强明度层次与局部细节，不再叠加额外颜色</small></div>
             <label class="switch"><input id="wowMode" type="checkbox" checked /><span></span></label>
           </div>
         </div>
@@ -198,10 +198,13 @@
         <div class="export-panel">
           <div>
             <p class="eyebrow">FULL RESOLUTION</p>
-            <h3>保留每一個像素。</h3>
-            <p id="exportMeta">準備輸出原圖尺寸</p>
+            <h3>清晰导出，不虚假放大。</h3>
+            <p id="exportMeta">准备输出原生像素</p>
           </div>
           <div class="export-options">
+            <label>尺寸
+              <select id="exportResolution"><option value="native">清晰度优先</option><option value="original">保持原图尺寸</option></select>
+            </label>
             <label>格式
               <select id="exportFormat"><option value="image/jpeg">JPG</option><option value="image/png">PNG</option></select>
             </label>
