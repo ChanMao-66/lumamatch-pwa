@@ -1,0 +1,12 @@
+{
+  "name": "lumamatch-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first reference photo color, light and composition matching PWA",
+  "scripts": {
+    "serve": "npx serve docs"
+  },
+  "devDependencies": {
+    "serve": "^14.2.4"
+  }
+}

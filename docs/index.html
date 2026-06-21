@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#12130f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="LumaMatch" />
+  <meta name="description" content="LumaMatch：以參考照片智慧匹配色彩、光影與構圖。" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="./icon.svg" />
+  <link rel="stylesheet" href="./styles.css" />
+  <title>LumaMatch — AI 攝影風格匹配</title>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="LumaMatch 首頁">
+        <span class="brand-mark">L</span>
+        <span>LumaMatch</span>
+      </a>
+      <div class="top-actions">
+        <div class="privacy-pill"><span></span> 照片僅在本機處理</div>
+        <button class="install-button" id="installButton">安裝 App</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero" id="hero">
+        <p class="eyebrow">AI PHOTO STUDIO</p>
+        <h1>借一束光，<br />完成你的作品。</h1>
+        <p class="hero-copy">選一張喜歡的攝影作品，智慧匹配它的色彩、明暗與氛圍，再找到更好的構圖。</p>
+      </section>
+
+      <section class="preset-section" id="presetSection">
+        <div class="preset-heading">
+          <div>
+            <p class="eyebrow">ONE-TAP LOOKS</p>
+            <h2>不找参考图，也能直接开始。</h2>
+          </div>
+          <p>选择一个受经典摄影色彩启发的风格，再上传自己的照片。所有范本均为原创参数，并非品牌官方滤镜。</p>
+        </div>
+        <div class="preset-strip" id="presetStrip">
+          <button class="preset-card" data-preset="fujiClassic"><span class="preset-art fuji-classic"></span><strong>经典负片感</strong><small>克制 · 青绿 · 纪实</small></button>
+          <button class="preset-card" data-preset="fujiVelvia"><span class="preset-art fuji-velvia"></span><strong>鲜艳正片感</strong><small>浓郁 · 风景 · 高饱和</small></button>
+          <button class="preset-card" data-preset="leicaCinema"><span class="preset-art leica-cinema"></span><strong>徕卡电影感</strong><small>深红 · 阴影 · 叙事</small></button>
+          <button class="preset-card" data-preset="portraWarm"><span class="preset-art portra-warm"></span><strong>暖调人像</strong><small>柔肤 · 奶油 · 胶片</small></button>
+          <button class="preset-card" data-preset="japanAir"><span class="preset-art japan-air"></span><strong>日系空气感</strong><small>明亮 · 清淡 · 柔和</small></button>
+          <button class="preset-card" data-preset="noir"><span class="preset-art noir"></span><strong>黑白纪实</strong><small>黑白 · 颗粒 · 强对比</small></button>
+        </div>
+        <div class="preset-status hidden" id="presetStatus"><span>✓</span><strong id="presetStatusName"></strong><button id="clearPreset">取消范本</button></div>
+      </section>
+
+      <section class="upload-grid" aria-label="照片上傳">
+        <label class="upload-card reference-card" id="referenceDrop">
+          <input id="referenceInput" type="file" accept="image/*" />
+          <img id="referencePreview" alt="參考照片預覽" />
+          <div class="upload-content">
+            <span class="step-number">01</span>
+            <span class="upload-icon" aria-hidden="true">＋</span>
+            <strong>選擇風格參考 <em>可选</em></strong>
+            <small>若已选择上方范本，只需上传自己的照片</small>
+          </div>
+          <button class="replace-button" type="button">更換參考</button>
+        </label>
+
+        <label class="upload-card source-card" id="sourceDrop">
+          <input id="sourceInput" type="file" accept="image/*" />
+          <img id="sourcePreview" alt="原始照片預覽" />
+          <div class="upload-content">
+            <span class="step-number">02</span>
+            <span class="upload-icon" aria-hidden="true">＋</span>
+            <strong>上傳你的照片</strong>
+            <small>保留原始尺寸，支援手機高畫質照片</small>
+          </div>
+          <button class="replace-button" type="button">更換照片</button>
+        </label>
+      </section>
+
+      <section class="action-zone">
+        <div class="scene-advice hidden" id="sceneAdvice">
+          <span>✦</span>
+          <div><strong>AI 场景推荐</strong><small id="sceneAdviceText"></small></div>
+          <button id="useRecommendation">采用推荐</button>
+        </div>
+        <button class="primary-action" id="matchButton" disabled>
+          <span>開始智慧匹配</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+        <p id="matchHint">加入兩張照片後即可開始</p>
+      </section>
+
+      <section class="studio hidden" id="studio" aria-live="polite">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">YOUR RESULT</p>
+            <h2>風格已經抵達。</h2>
+          </div>
+          <button class="ghost-button" id="restartButton">重新選擇</button>
+        </div>
+
+        <div class="result-stage" id="resultStage">
+          <canvas id="resultCanvas"></canvas>
+          <div class="original-layer" id="originalLayer">
+            <canvas id="originalCanvas"></canvas>
+          </div>
+          <div class="compare-line" id="compareLine"><span>↔</span></div>
+          <span class="image-label original-label">原圖</span>
+          <span class="image-label result-label">效果</span>
+        </div>
+        <input class="compare-slider" id="compareSlider" type="range" min="0" max="100" value="50" aria-label="修改前後比較" />
+
+        <div class="control-panel">
+          <div class="control-header">
+            <div>
+              <span class="control-index">01</span>
+              <h3>風格強度</h3>
+            </div>
+            <output id="strengthValue">72%</output>
+          </div>
+          <input id="strengthSlider" type="range" min="0" max="100" value="72" />
+          <div class="range-labels"><span>保留原貌</span><span>貼近參考</span></div>
+
+          <div class="fine-controls">
+            <label><span>明暗 <output id="exposureValue">0</output></span><input id="exposureSlider" type="range" min="-40" max="40" value="0" /></label>
+            <label><span>對比 <output id="contrastValue">0</output></span><input id="contrastSlider" type="range" min="-40" max="40" value="0" /></label>
+            <label><span>冷暖 <output id="warmthValue">0</output></span><input id="warmthSlider" type="range" min="-40" max="40" value="0" /></label>
+          </div>
+
+          <div class="toggle-row">
+            <div><strong>自然膚色保護</strong><small>降低背景色彩對人物皮膚的污染</small></div>
+            <label class="switch"><input id="skinProtect" type="checkbox" checked /><span></span></label>
+          </div>
+          <div class="toggle-row impact-row">
+            <div><strong>惊艳增强</strong><small>重塑局部对比、通透度与高光暖色，让前后差异更明显</small></div>
+            <label class="switch"><input id="wowMode" type="checkbox" checked /><span></span></label>
+          </div>
+        </div>
+
+        <div class="ai-retouch-panel">
+          <div class="panel-title">
+            <div><span class="control-index">02</span><h3>AI 智慧修图</h3><p>针对人像与普通照片自动优化，不改变五官和真实身份。</p></div>
+            <button class="magic-button" id="autoRetouchButton"><span>✦</span> 一键推荐</button>
+          </div>
+          <div class="retouch-controls">
+            <label><span>自然磨皮 <output id="smoothValue">0</output></span><input id="smoothSlider" type="range" min="0" max="60" value="0" /></label>
+            <label><span>人物提亮 <output id="faceLightValue">0</output></span><input id="faceLightSlider" type="range" min="0" max="40" value="0" /></label>
+            <label><span>细节增强 <output id="detailValue">0</output></span><input id="detailSlider" type="range" min="0" max="40" value="0" /></label>
+          </div>
+        </div>
+
+        <div class="voice-panel">
+          <div class="voice-orb" id="voiceButton" role="button" tabindex="0" aria-label="开始语音输入"><span>◉</span></div>
+          <div class="voice-copy">
+            <p class="eyebrow">TELL LUMA</p>
+            <h3>用一句话告诉我，你想要什么感觉。</h3>
+            <p>例如：“温暖一点、人物亮一些，做成柔和的胶片人像。”</p>
+            <div class="prompt-box">
+              <textarea id="editPrompt" rows="2" placeholder="输入修图要求，或点击左侧按钮说出来…"></textarea>
+              <button id="applyPromptButton">套用要求 <span>→</span></button>
+            </div>
+            <p class="prompt-result hidden" id="promptResult"></p>
+            <small class="voice-note">照片处理留在本机；语音识别由当前浏览器提供，无法使用时可直接输入文字。</small>
+          </div>
+        </div>
+
+        <div class="composition-section">
+          <div class="section-heading compact">
+            <div>
+              <span class="control-index">03</span>
+              <h3>智慧構圖</h3>
+              <p>依照视觉重心重新取景，也能旋转与自动校正水平。</p>
+            </div>
+          </div>
+          <div class="composition-grid" id="compositionGrid">
+            <button class="composition-card selected" data-mode="original">
+              <canvas></canvas><span><strong>完整畫面</strong><small>保留原構圖</small></span><i>✓</i>
+            </button>
+            <button class="composition-card" data-mode="portrait">
+              <canvas></canvas><span><strong>攝影推薦</strong><small>4:5 視覺重心</small></span><i>✓</i>
+            </button>
+            <button class="composition-card" data-mode="cinema">
+              <canvas></canvas><span><strong>電影寬幅</strong><small>16:9 敘事感</small></span><i>✓</i>
+            </button>
+          </div>
+          <div class="transform-tools">
+            <div class="straighten-actions">
+              <button id="rotateLeftButton" aria-label="向左旋转九十度">↶ <span>左转 90°</span></button>
+              <button class="auto-straighten" id="autoStraightenButton">⌁ <span>AI 水平校正</span></button>
+              <button id="rotateRightButton" aria-label="向右旋转九十度"><span>右转 90°</span> ↷</button>
+            </div>
+            <label class="rotation-control"><span>精细旋转 <output id="rotationValue">0.0°</output></span><input id="rotationSlider" type="range" min="-12" max="12" step="0.1" value="0" /></label>
+          </div>
+        </div>
+
+        <div class="export-panel">
+          <div>
+            <p class="eyebrow">FULL RESOLUTION</p>
+            <h3>保留每一個像素。</h3>
+            <p id="exportMeta">準備輸出原圖尺寸</p>
+          </div>
+          <div class="export-options">
+            <label>格式
+              <select id="exportFormat"><option value="image/jpeg">JPG</option><option value="image/png">PNG</option></select>
+            </label>
+            <button class="primary-action" id="exportButton"><span>匯出高畫質照片</span><svg viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M5 21h14"/></svg></button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer><span>LumaMatch / Local-first photo studio</span><span>你的照片，你的作品。</span></footer>
+  </div>
+
+  <div class="processing-overlay hidden" id="processingOverlay">
+    <div class="processing-card">
+      <div class="orb"><span></span></div>
+      <p class="eyebrow">ANALYSING LIGHT</p>
+      <h2 id="processingTitle">正在理解兩張照片</h2>
+      <p id="processingDetail">分析明暗、色溫與色彩關係…</p>
+      <div class="progress"><span id="progressBar"></span></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+  <script src="./app.js" defer></script>
+</body>
+</html>

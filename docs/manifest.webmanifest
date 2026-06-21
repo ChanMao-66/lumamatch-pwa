@@ -1,0 +1,12 @@
+{
+  "name": "LumaMatch — AI 攝影風格匹配",
+  "short_name": "LumaMatch",
+  "description": "在裝置上匹配參考照片的色彩、光影與構圖。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f1eee6",
+  "theme_color": "#12130f",
+  "orientation": "any",
+  "icons": [{"src":"./icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}
